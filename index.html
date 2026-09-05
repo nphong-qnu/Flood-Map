@@ -285,16 +285,16 @@
   </footer>
 
   <script>
-    // 1. DANH SÁCH 8 LỚP NHÂN TỐ KHỚP TÊN VỚI FILE CỦA BẠN TRONG THƯ MỤC ./data/
+    // 1. DANH SÁCH CÁC LỚP NHÂN TỐ (HỖ TRỢ CẢ CHỮ THƯỜNG VÀ CHỮ HOA KHI TẢI LÊN GITHUB)
     const factorLayers = [
-      { id: 'dem',        file: 'dem.geojson',      name: 'DEM',         fullName: 'Độ cao địa hình (DEM)',  icon: 'mountain' },
-      { id: 'slope',      file: 'slope.geojson',    name: 'Slope',       fullName: 'Độ dốc địa hình',        icon: 'trending-down' },
-      { id: 'twi',        file: 'TWI.geojson',      name: 'TWI',         fullName: 'Chỉ số ẩm ướt (TWI)',    icon: 'droplets' },
-      { id: 'spi',        file: 'SPI.geojson',      name: 'SPI',         fullName: 'Chỉ số dòng chảy (SPI)', icon: 'activity' },
-      { id: 'rain',       file: 'rain.geojson',     name: 'Rainfall',    fullName: 'Lượng mưa (Rainfall)',   icon: 'cloud-rain' },
-      { id: 'dist_water', file: 'river.geojson',    name: 'Dist.Water',  fullName: 'Khoảng cách đến sông',   icon: 'git-commit' },
-      { id: 'dist_road',  file: 'road.geojson',     name: 'Dist.Road',   fullName: 'Khoảng cách đến đường',  icon: 'navigation' },
-      { id: 'landuse',    file: 'landuse.geojson',  name: 'Landuse',     fullName: 'Sử dụng đất (Landuse)',  icon: 'trees' }
+      { id: 'dem',        files: ['dem.geojson', 'Dem.geojson'],              name: 'DEM',         fullName: 'Độ cao địa hình (DEM)',  icon: 'mountain' },
+      { id: 'slope',      files: ['slope.geojson', 'Slope.geojson'],          name: 'Slope',       fullName: 'Độ dốc địa hình',        icon: 'trending-down' },
+      { id: 'twi',        files: ['twi.geojson', 'TWI.geojson', 'Twi.geojson'], name: 'TWI',       fullName: 'Chỉ số ẩm ướt (TWI)',    icon: 'droplets' },
+      { id: 'spi',        files: ['spi.geojson', 'SPI.geojson', 'Spi.geojson'], name: 'SPI',       fullName: 'Chỉ số dòng chảy (SPI)', icon: 'activity' },
+      { id: 'rain',       files: ['rain.geojson', 'Rain.geojson'],            name: 'Rainfall',    fullName: 'Lượng mưa (Rainfall)',   icon: 'cloud-rain' },
+      { id: 'dist_water', files: ['river.geojson', 'River.geojson'],          name: 'Dist.Water',  fullName: 'Khoảng cách đến sông',   icon: 'git-commit' },
+      { id: 'dist_road',  files: ['road.geojson', 'Road.geojson'],            name: 'Dist.Road',   fullName: 'Khoảng cách đến đường',  icon: 'navigation' },
+      { id: 'landuse',    files: ['landuse.geojson', 'Landuse.geojson'],      name: 'Landuse',     fullName: 'Sử dụng đất (Landuse)',  icon: 'trees' }
     ];
 
     const levelColors = ['#91cf60', '#d9ef8b', '#fee08b', '#fc8d59', '#d73027'];
@@ -309,6 +309,21 @@
 
     let riverOverlayLayer = null;
     let roadOverlayLayer = null;
+
+    // Hàm nạp GeoJSON thông minh (tự động thử các kiểu đặt tên file hoa/thường)
+    async function fetchWithCandidateFiles(fileCandidates) {
+      const candidates = Array.isArray(fileCandidates) ? fileCandidates : [fileCandidates];
+      for (const fileName of candidates) {
+        try {
+          const res = await fetch(`./data/${fileName}`);
+          if (res.ok) {
+            const data = await res.json();
+            return { data, fileName };
+          }
+        } catch (e) {}
+      }
+      throw new Error(`Không tìm thấy file trong danh sách: ${candidates.join(', ')}`);
+    }
 
     function initMap() {
       map = L.map('map', {
@@ -434,13 +449,13 @@
       document.getElementById('point-inspector').classList.add('hidden');
     }
 
-    function switchLayer(layerId) {
+    async function switchLayer(layerId) {
       const badge = document.getElementById('data-status-badge');
       const legendLabel = document.getElementById('legend-current-layer');
 
       if (layerId === 'risk') {
         legendLabel.innerText = "Nguy cơ tổng hợp (AHP)";
-        loadGeoJSONFile('./data/dem.geojson', 'Nguy cơ tổng hợp');
+        loadGeoJSONFile(['dem.geojson', 'Dem.geojson'], 'Nguy cơ tổng hợp');
         return;
       }
 
@@ -448,38 +463,36 @@
       if (!factor) return;
 
       legendLabel.innerText = factor.fullName;
-      const filePath = `./data/${factor.file}`;
 
-      badge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-spin"></span> Đang nạp ${factor.file}...`;
-
-      if (cachedGeoData[factor.file]) {
-        renderMapData(cachedGeoData[factor.file]);
-        badge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Đã nạp ${factor.file}`;
+      // Kiểm tra bộ nhớ tạm (Cache) để mở ngay nếu đã nạp trước đó
+      if (cachedGeoData[factor.id]) {
+        renderMapData(cachedGeoData[factor.id]);
+        badge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Đã nạp ${factor.name}`;
         return;
       }
 
-      fetch(filePath)
-        .then(res => {
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          return res.json();
-        })
-        .then(data => {
-          cachedGeoData[factor.file] = data;
-          renderMapData(data);
-          badge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Đã nạp ${factor.file}`;
-        })
-        .catch(err => {
-          // Cơ chế mô phỏng tự động cho vùng Quy Nhơn Đông nếu chưa kịp tải file
-          badge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span> Mô phỏng ${factor.name}`;
-          generateQuyNhonSimulation(factor.fullName);
-        });
+      // Tùy chỉnh thông báo nếu là file lớn như SPI hoặc TWI
+      const isLargeFile = (factor.id === 'spi' || factor.id === 'twi');
+      badge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-spin"></span> Đang nạp ${factor.name}${isLargeFile ? ' (~8-10MB)...' : '...'}`;
+
+      try {
+        const result = await fetchWithCandidateFiles(factor.files);
+        cachedGeoData[factor.id] = result.data;
+        renderMapData(result.data);
+        badge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Đã nạp ${result.fileName}`;
+      } catch (err) {
+        badge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span> Mô phỏng ${factor.name}`;
+        generateQuyNhonSimulation(factor.fullName);
+      }
     }
 
-    function loadGeoJSONFile(filePath, title) {
-      fetch(filePath)
-        .then(res => res.json())
-        .then(data => renderMapData(data))
-        .catch(err => generateQuyNhonSimulation(title));
+    async function loadGeoJSONFile(fileCandidates, title) {
+      try {
+        const result = await fetchWithCandidateFiles(fileCandidates);
+        renderMapData(result.data);
+      } catch (err) {
+        generateQuyNhonSimulation(title);
+      }
     }
 
     function renderMapData(data) {
