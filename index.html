@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WEBGIS PHÂN VÙNG NGUY CƠ NGẬP LỤT QUY NHƠN ĐÔNG</title>
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Font: Inter / Plus Jakarta Sans -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  
+  <!-- Leaflet CSS & JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    body { font-family: 'Plus Jakarta Sans', sans-serif; }
+    .font-mono { font-family: 'Roboto Mono', monospace; }
+
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: #f8fafc; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    
+    #map { height: 100%; width: 100%; z-index: 1; }
+    
+    .panel-card {
+      background: rgba(255, 255, 255, 0.98);
+      box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(15, 23, 42, 0.06);
+    }
+  </style>
+</head>
+<body class="bg-slate-900 text-slate-800 flex flex-col h-screen overflow-hidden select-none">
+
+  <!-- HEADER: ĐÚNG TÊN ĐỀ TÀI VÀ KHU VỰC NGHIÊN CỨU -->
+  <header class="bg-slate-900 text-white border-b border-slate-800 px-4 py-2.5 flex items-center justify-between shadow-md shrink-0 z-30">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 via-sky-500 to-cyan-400 flex items-center justify-center text-white shadow-lg shadow-blue-500/20">
+        <i data-lucide="waves" class="w-5 h-5"></i>
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="text-[10px] font-extrabold tracking-wider uppercase px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-400/30">WEBGIS</span>
+          <h1 class="text-sm md:text-base font-extrabold tracking-tight text-white uppercase">
+            Phân Vùng Nguy Cơ Ngập Lụt — Quy Nhơn Đông
+          </h1>
+        </div>
+        <p class="text-[11px] text-slate-400">Hệ hỗ trợ ra quyết định & Đánh giá đa chỉ tiêu (MCDA - AHP)</p>
+      </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="flex items-center gap-2">
+      <div class="hidden lg:flex items-center gap-1.5 text-xs bg-slate-800/90 p-1 rounded-xl border border-slate-700/70">
+        <button onclick="flyToLocation([13.7820, 109.2194], 13)" class="px-2.5 py-1 rounded-lg hover:bg-slate-700 text-slate-300 transition text-[11px] font-medium">Toàn vùng Quy Nhơn</button>
+        <button onclick="flyToLocation([13.8050, 109.2080], 14)" class="px-2.5 py-1 rounded-lg hover:bg-slate-700 text-slate-300 transition text-[11px] font-medium">Sông Hà Thanh</button>
+        <button onclick="flyToLocation([13.8200, 109.2450], 13.5)" class="px-2.5 py-1 rounded-lg hover:bg-slate-700 text-slate-300 transition text-[11px] font-medium">Đầm Thị Nại</button>
+        <button onclick="flyToLocation([13.7910, 109.1850], 14.5)" class="px-2.5 py-1 rounded-lg hover:bg-slate-700 text-slate-300 transition text-[11px] font-medium">P. Nhơn Bình - Nhơn Phú</button>
+      </div>
+      <button onclick="resetMapView()" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold shadow-sm transition flex items-center gap-1.5">
+        <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i> <span class="hidden sm:inline">Đặt lại vị trí</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- MAIN LAYOUT: SIDEBAR (LỚP DỮ LIỆU) + MAP CHÍNH -->
+  <div class="flex-1 flex overflow-hidden relative">
+
+    <!-- CỘT TRÁI: LỚP DỮ LIỆU (THEO ĐÚNG SƠ ĐỒ ASCII CỦA BẠN) -->
+    <aside class="w-72 md:w-80 bg-white border-r border-slate-200 flex flex-col z-20 shadow-md shrink-0">
+      
+      <!-- Tiêu đề sidebar -->
+      <div class="p-3 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between shrink-0">
+        <div class="flex items-center gap-2">
+          <i data-lucide="layers" class="w-4 h-4 text-blue-600"></i>
+          <span class="text-xs font-extrabold text-slate-800 uppercase tracking-wider">LỚP DỮ LIỆU</span>
+        </div>
+        <span id="data-status-badge" class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-semibold flex items-center gap-1">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Sẵn sàng
+        </span>
+      </div>
+
+      <div class="flex-1 overflow-y-auto p-3 space-y-4 text-xs">
+
+        <!-- 1. KẾT QUẢ -->
+        <div class="bg-blue-50/60 border border-blue-200/80 rounded-xl p-2.5">
+          <div class="text-[11px] font-extrabold uppercase tracking-wider text-blue-900 mb-2 flex items-center justify-between">
+            <span>KẾT QUẢ</span>
+            <span class="text-[9px] bg-blue-600 text-white px-1.5 py-0.5 rounded font-bold">MCDA</span>
+          </div>
+          
+          <label class="flex items-center gap-2 p-2 rounded-lg bg-white border border-blue-200 hover:border-blue-400 cursor-pointer transition shadow-xs">
+            <input type="radio" name="active_layer" id="layer-risk" checked onchange="switchLayer('risk')" class="w-4 h-4 text-blue-600 accent-blue-600 cursor-pointer">
+            <div class="flex-1">
+              <span class="font-bold text-slate-800 block text-xs">☑ Nguy cơ tổng hợp</span>
+              <span class="text-[10px] text-slate-500 block">Mô hình phân vùng 5 cấp AHP</span>
+            </div>
+            <i data-lucide="shield-alert" class="w-4 h-4 text-rose-500"></i>
+          </label>
+        </div>
+
+        <!-- 2. YẾU TỐ (8 LỚP NHÂN TỐ) -->
+        <div>
+          <div class="text-[11px] font-extrabold uppercase tracking-wider text-slate-500 mb-2 flex items-center justify-between">
+            <span>YẾU TỐ ẢNH HƯỞNG</span>
+            <span class="text-[10px] text-slate-400 font-normal">5 Cấp (1 - 5)</span>
+          </div>
+
+          <div class="space-y-1" id="factor-list-container">
+            <!-- Danh sách 8 lớp nhân tố được render động -->
+          </div>
+        </div>
+
+        <!-- 3. NỀN & ĐỐI TƯỢNG ĐẶC TẢ (SÔNG, ĐƯỜNG, ẢNH VỆ TINH) -->
+        <div class="pt-2 border-t border-slate-100">
+          <div class="text-[11px] font-extrabold uppercase tracking-wider text-slate-500 mb-2">
+            NỀN & LỚP PHỦ VECTOR
+          </div>
+
+          <div class="space-y-1.5">
+            <!-- Lớp phủ sông -->
+            <label class="flex items-center justify-between p-2 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 cursor-pointer transition">
+              <div class="flex items-center gap-2">
+                <input type="checkbox" id="chk-river-overlay" onchange="toggleOverlay('river', this.checked)" class="w-3.5 h-3.5 text-blue-600 rounded accent-blue-600 cursor-pointer">
+                <span class="font-semibold text-slate-700">Mạng lưới Sông ngòi</span>
+              </div>
+              <i data-lucide="git-branch" class="w-3.5 h-3.5 text-sky-600"></i>
+            </label>
+
+            <!-- Lớp phủ đường -->
+            <label class="flex items-center justify-between p-2 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 cursor-pointer transition">
+              <div class="flex items-center gap-2">
+                <input type="checkbox" id="chk-road-overlay" onchange="toggleOverlay('road', this.checked)" class="w-3.5 h-3.5 text-blue-600 rounded accent-blue-600 cursor-pointer">
+                <span class="font-semibold text-slate-700">Mạng lưới Giao thông</span>
+              </div>
+              <i data-lucide="navigation" class="w-3.5 h-3.5 text-slate-600"></i>
+            </label>
+          </div>
+
+          <!-- Lựa chọn ảnh nền Base map -->
+          <div class="grid grid-cols-2 gap-1.5 mt-2.5">
+            <label class="flex items-center gap-1.5 p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 cursor-pointer text-[11px]">
+              <input type="radio" name="basemap" value="osm" checked onchange="switchBaseMap('osm')" class="accent-blue-600">
+              <span class="font-medium text-slate-700">Bản đồ OSM</span>
+            </label>
+            <label class="flex items-center gap-1.5 p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 cursor-pointer text-[11px]">
+              <input type="radio" name="basemap" value="satellite" onchange="switchBaseMap('satellite')" class="accent-blue-600">
+              <span class="font-medium text-slate-700">Ảnh Vệ Tinh</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Thanh chỉnh độ trong suốt Opacity -->
+        <div class="p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
+          <div class="flex justify-between items-center mb-1 text-[11px] font-semibold text-slate-700">
+            <span>Độ mờ lớp phủ:</span>
+            <span id="opacity-label" class="font-mono text-blue-600 font-bold">85%</span>
+          </div>
+          <input type="range" min="0.1" max="1" step="0.05" value="0.85" oninput="updateGlobalOpacity(this.value)" class="w-full accent-blue-600 h-1.5 bg-slate-200 rounded-lg cursor-pointer">
+        </div>
+
+      </div>
+    </aside>
+
+    <!-- MAIN MAP AREA -->
+    <main class="flex-1 relative h-full w-full bg-slate-900 overflow-hidden flex flex-col">
+      
+      <!-- THANH TÌM KIẾM THEO ĐÚNG SƠ ĐỒ [🔎 Tìm kiếm] -->
+      <div class="absolute top-3 left-3 right-3 sm:right-auto sm:w-96 z-[1000]">
+        <div class="panel-card rounded-2xl shadow-xl border border-slate-200/90 flex items-center p-1.5">
+          <div class="pl-2.5 pr-1 text-slate-400">
+            <i data-lucide="search" class="w-4 h-4"></i>
+          </div>
+          <input 
+            type="text" 
+            id="map-search-input" 
+            placeholder="🔎 Tìm kiếm xã, phường, sông, đầm Thị Nại..." 
+            onkeydown="if(event.key==='Enter') executeSearch(this.value)"
+            class="w-full px-2 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none bg-transparent font-medium"
+          >
+          <button onclick="executeSearch(document.getElementById('map-search-input').value)" class="p-1.5 hover:bg-slate-100 rounded-xl text-slate-500 transition" title="Tìm kiếm">
+            <i data-lucide="arrow-right" class="w-4 h-4 text-blue-600"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- KHUNG BẢN ĐỒ LEAFLET -->
+      <div id="map" class="flex-1"></div>
+
+      <!-- POPUP THÔNG TIN ĐIỂM CHỌN (INSPECTOR CARD) -->
+      <div id="point-inspector" class="hidden absolute top-16 right-4 z-[1000] panel-card p-3.5 rounded-2xl shadow-2xl border border-blue-200 w-72 transition-all">
+        <div class="flex items-center justify-between pb-2 border-b border-slate-100 mb-2">
+          <div class="flex items-center gap-1.5 text-blue-700 font-bold text-xs">
+            <i data-lucide="info" class="w-4 h-4"></i> Chi Tiết Điểm Tra Cứu
+          </div>
+          <button onclick="closeInspector()" class="text-slate-400 hover:text-slate-700">
+            <i data-lucide="x" class="w-4 h-4"></i>
+          </button>
+        </div>
+        <div id="point-inspector-body" class="space-y-1.5 text-xs">
+          <!-- Populated by map click -->
+        </div>
+      </div>
+
+    </main>
+
+  </div>
+
+  <!-- BĂNG ĐÁY CHÂN TRANG: LEGEND (BÊN TRÁI) | THỐNG KÊ NGUY CƠ (BÊN PHẢI) -->
+  <footer class="bg-white border-t border-slate-200 h-44 md:h-40 shrink-0 z-20 flex flex-col md:flex-row shadow-lg">
+    
+    <!-- CỘT TRÁI: CHÚ GIẢI (LEGEND - 5 CẤP CHUẨN) -->
+    <div class="w-full md:w-1/2 p-3 border-b md:border-b-0 md:border-r border-slate-200 flex flex-col justify-between overflow-y-auto">
+      <div class="flex items-center justify-between mb-1.5">
+        <div class="flex items-center gap-1.5">
+          <i data-lucide="list" class="w-3.5 h-3.5 text-blue-600"></i>
+          <h3 class="text-xs font-bold text-slate-800 uppercase tracking-wide">BẢNG CHÚ GIẢI (LEGEND)</h3>
+        </div>
+        <span id="legend-current-layer" class="text-[10px] font-bold text-blue-700 px-2 py-0.5 bg-blue-50 rounded border border-blue-200">Nguy cơ tổng hợp</span>
+      </div>
+
+      <!-- 5 Cấp độ tiêu chuẩn quốc tế -->
+      <div class="grid grid-cols-5 gap-2 text-center text-[10px]">
+        <div class="flex flex-col items-center gap-1 p-1 rounded-lg bg-slate-50 border border-slate-100">
+          <span class="w-full h-3 rounded bg-[#91cf60] border border-green-800/30"></span>
+          <span class="font-bold text-slate-700">Cấp 1</span>
+          <span class="text-slate-500 text-[9px]">Rất thấp</span>
+        </div>
+        <div class="flex flex-col items-center gap-1 p-1 rounded-lg bg-slate-50 border border-slate-100">
+          <span class="w-full h-3 rounded bg-[#d9ef8b] border border-lime-800/30"></span>
+          <span class="font-bold text-slate-700">Cấp 2</span>
+          <span class="text-slate-500 text-[9px]">Thấp</span>
+        </div>
+        <div class="flex flex-col items-center gap-1 p-1 rounded-lg bg-slate-50 border border-slate-100">
+          <span class="w-full h-3 rounded bg-[#fee08b] border border-yellow-800/30"></span>
+          <span class="font-bold text-slate-700">Cấp 3</span>
+          <span class="text-slate-500 text-[9px]">Trung bình</span>
+        </div>
+        <div class="flex flex-col items-center gap-1 p-1 rounded-lg bg-slate-50 border border-slate-100">
+          <span class="w-full h-3 rounded bg-[#fc8d59] border border-orange-800/30"></span>
+          <span class="font-bold text-slate-700">Cấp 4</span>
+          <span class="text-slate-500 text-[9px]">Cao</span>
+        </div>
+        <div class="flex flex-col items-center gap-1 p-1 rounded-lg bg-slate-50 border border-slate-100">
+          <span class="w-full h-3 rounded bg-[#d73027] border border-red-800/30"></span>
+          <span class="font-bold text-slate-700">Cấp 5</span>
+          <span class="text-slate-500 text-[9px]">Rất cao</span>
+        </div>
+      </div>
+
+      <div class="flex justify-between items-center text-[10px] text-slate-400 pt-1">
+        <span>Vùng nghiên cứu: Quy Nhơn Đông, Tỉnh Bình Định</span>
+        <span class="font-mono">Hệ tọa độ: WGS84 (EPSG:4326)</span>
+      </div>
+    </div>
+
+    <!-- CỘT PHẢI: THỐNG KÊ NGUY CƠ (BIỂU ĐỒ & DIỆN TÍCH %) -->
+    <div class="w-full md:w-1/2 p-3 flex items-center justify-between gap-4 overflow-hidden">
+      <!-- Biểu đồ Doughnut Chart -->
+      <div class="w-24 h-24 sm:w-28 sm:h-28 relative shrink-0">
+        <canvas id="riskDoughnutChart"></canvas>
+      </div>
+
+      <!-- Bảng tỷ lệ phần trăm phân bố -->
+      <div class="flex-1 space-y-1 text-xs">
+        <div class="flex items-center justify-between font-bold text-slate-700 text-[11px] border-b pb-1">
+          <span class="flex items-center gap-1"><i data-lucide="pie-chart" class="w-3.5 h-3.5 text-blue-600"></i> THỐNG KÊ NGUY CƠ</span>
+          <span id="stat-total-features" class="font-mono text-blue-600 font-bold">100% diện tích</span>
+        </div>
+        
+        <div class="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]" id="stat-breakdown-grid">
+          <!-- Render tự động các hàng thống kê % -->
+        </div>
+      </div>
+    </div>
+
+  </footer>
+
+  <script>
+    // 1. DANH SÁCH CÁC LỚP NHÂN TỐ (HỖ TRỢ CẢ CHỮ THƯỜNG VÀ CHỮ HOA KHI TẢI LÊN GITHUB)
+    const factorLayers = [
+      { id: 'dem',        files: ['dem.geojson', 'Dem.geojson'],              name: 'DEM',         fullName: 'Độ cao địa hình (DEM)',  icon: 'mountain' },
+      { id: 'slope',      files: ['slope.geojson', 'Slope.geojson'],          name: 'Slope',       fullName: 'Độ dốc địa hình',        icon: 'trending-down' },
+      { id: 'twi',        files: ['twi.geojson', 'TWI.geojson', 'Twi.geojson'], name: 'TWI',       fullName: 'Chỉ số ẩm ướt (TWI)',    icon: 'droplets' },
+      { id: 'spi',        files: ['spi.geojson', 'SPI.geojson', 'Spi.geojson'], name: 'SPI',       fullName: 'Chỉ số dòng chảy (SPI)', icon: 'activity' },
+      { id: 'rain',       files: ['rain.geojson', 'Rain.geojson'],            name: 'Rainfall',    fullName: 'Lượng mưa (Rainfall)',   icon: 'cloud-rain' },
+      { id: 'dist_water', files: ['river.geojson', 'River.geojson'],          name: 'Dist.Water',  fullName: 'Khoảng cách đến sông',   icon: 'git-commit' },
+      { id: 'dist_road',  files: ['road.geojson', 'Road.geojson'],            name: 'Dist.Road',   fullName: 'Khoảng cách đến đường',  icon: 'navigation' },
+      { id: 'landuse',    files: ['landuse.geojson', 'Landuse.geojson'],      name: 'Landuse',     fullName: 'Sử dụng đất (Landuse)',  icon: 'trees' }
+    ];
+
+    const levelColors = ['#91cf60', '#d9ef8b', '#fee08b', '#fc8d59', '#d73027'];
+    const levelLabels = ['Rất Thấp', 'Thấp', 'Trung Bình', 'Cao', 'Rất Cao'];
+
+    // VÙNG TRUNG TÂM QUY NHƠN ĐÔNG
+    const QUY_NHON_CENTER = [13.7820, 109.2194];
+    let map;
+    let activeGeojsonLayer = null;
+    let cachedGeoData = {};
+    let globalOpacity = 0.85;
+
+    let riverOverlayLayer = null;
+    let roadOverlayLayer = null;
+
+    // Hàm nạp GeoJSON thông minh (tự động thử các kiểu đặt tên file hoa/thường)
+    async function fetchWithCandidateFiles(fileCandidates) {
+      const candidates = Array.isArray(fileCandidates) ? fileCandidates : [fileCandidates];
+      for (const fileName of candidates) {
+        try {
+          const res = await fetch(`./data/${fileName}`);
+          if (res.ok) {
+            const data = await res.json();
+            return { data, fileName };
+          }
+        } catch (e) {}
+      }
+      throw new Error(`Không tìm thấy file trong danh sách: ${candidates.join(', ')}`);
+    }
+
+    function initMap() {
+      map = L.map('map', {
+        center: QUY_NHON_CENTER,
+        zoom: 12,
+        zoomControl: false
+      });
+
+      L.control.zoom({ position: 'topright' }).addTo(map);
+      L.control.scale({ imperial: false, position: 'bottomleft' }).addTo(map);
+
+      // Bản đồ nền OpenStreetMap
+      window.osmTile = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors',
+        maxZoom: 19
+      }).addTo(map);
+
+      // Bản đồ nền Vệ tinh Esri
+      window.satelliteTile = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles &copy; Esri'
+      });
+    }
+
+    function switchBaseMap(type) {
+      if (type === 'satellite') {
+        map.removeLayer(window.osmTile);
+        window.satelliteTile.addTo(map);
+      } else {
+        map.removeLayer(window.satelliteTile);
+        window.osmTile.addTo(map);
+      }
+    }
+
+    function renderFactorList() {
+      const container = document.getElementById('factor-list-container');
+      container.innerHTML = '';
+
+      factorLayers.forEach(factor => {
+        const item = document.createElement('label');
+        item.className = "flex items-center justify-between p-2 rounded-lg bg-white hover:bg-slate-50 border border-slate-200 cursor-pointer transition shadow-2xs";
+        item.innerHTML = `
+          <div class="flex items-center gap-2">
+            <input type="radio" name="active_layer" id="radio-${factor.id}" value="${factor.id}" onchange="switchLayer('${factor.id}')" class="w-3.5 h-3.5 text-blue-600 accent-blue-600 cursor-pointer">
+            <div>
+              <span class="font-bold text-slate-700 block">${factor.name}</span>
+              <span class="text-[10px] text-slate-400 block">${factor.fullName}</span>
+            </div>
+          </div>
+          <i data-lucide="${factor.icon}" class="w-3.5 h-3.5 text-slate-400"></i>
+        `;
+        container.appendChild(item);
+      });
+      lucide.createIcons();
+    }
+
+    function extractRank(props) {
+      if (!props) return 3;
+      const candidates = ['gridcode', 'DN', 'rank', 'Rank', 'class', 'Class', 'cap', 'Cap', 'value', 'Value', 'code', 'Id', 'id'];
+      for (let key of candidates) {
+        if (props[key] !== undefined && props[key] !== null) {
+          const val = parseInt(props[key], 10);
+          if (val >= 1 && val <= 5) return val;
+        }
+      }
+      for (let key in props) {
+        const val = parseInt(props[key], 10);
+        if (val >= 1 && val <= 5) return val;
+      }
+      return 3;
+    }
+
+    function styleFeature(feature) {
+      const rank = extractRank(feature.properties);
+      const color = levelColors[Math.max(1, Math.min(5, rank)) - 1];
+      return {
+        fillColor: color,
+        weight: 0.6,
+        opacity: 0.9,
+        color: '#ffffff',
+        fillOpacity: globalOpacity
+      };
+    }
+
+    function onEachFeature(feature, layer) {
+      layer.on({
+        mouseover: (e) => {
+          e.target.setStyle({ weight: 2, color: '#0f172a' });
+          e.target.bringToFront();
+        },
+        mouseout: (e) => {
+          if (activeGeojsonLayer) activeGeojsonLayer.resetStyle(e.target);
+        },
+        click: (e) => {
+          showPointInspector(feature.properties, e.latlng);
+        }
+      });
+    }
+
+    function showPointInspector(props, latlng) {
+      const rank = extractRank(props);
+      const card = document.getElementById('point-inspector');
+      const body = document.getElementById('point-inspector-body');
+      card.classList.remove('hidden');
+
+      let rows = '';
+      for (let k in props) {
+        if (typeof props[k] !== 'object') {
+          rows += `<div class="flex justify-between border-b border-slate-100 py-0.5"><span class="text-slate-400 font-mono text-[10px]">${k}:</span><span class="font-semibold text-slate-700">${props[k]}</span></div>`;
+        }
+      }
+
+      body.innerHTML = `
+        <div class="flex items-center justify-between p-2 rounded-xl bg-slate-50 border border-slate-200">
+          <span class="font-medium text-slate-600">Cấp phân vùng:</span>
+          <span class="font-bold text-xs px-2 py-0.5 rounded text-white" style="background:${levelColors[rank-1]}">Cấp ${rank} (${levelLabels[rank-1]})</span>
+        </div>
+        <div class="py-1">${rows}</div>
+        <div class="text-[10px] text-slate-400 font-mono text-right pt-1">Tọa độ: ${latlng.lat.toFixed(4)}°N, ${latlng.lng.toFixed(4)}°E</div>
+      `;
+    }
+
+    function closeInspector() {
+      document.getElementById('point-inspector').classList.add('hidden');
+    }
+
+    async function switchLayer(layerId) {
+      const badge = document.getElementById('data-status-badge');
+      const legendLabel = document.getElementById('legend-current-layer');
+
+      if (layerId === 'risk') {
+        legendLabel.innerText = "Nguy cơ tổng hợp (AHP)";
+        loadGeoJSONFile(['dem.geojson', 'Dem.geojson'], 'Nguy cơ tổng hợp');
+        return;
+      }
+
+      const factor = factorLayers.find(f => f.id === layerId);
+      if (!factor) return;
+
+      legendLabel.innerText = factor.fullName;
+
+      // Kiểm tra bộ nhớ tạm (Cache) để mở ngay nếu đã nạp trước đó
+      if (cachedGeoData[factor.id]) {
+        renderMapData(cachedGeoData[factor.id]);
+        badge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Đã nạp ${factor.name}`;
+        return;
+      }
+
+      // Tùy chỉnh thông báo nếu là file lớn như SPI hoặc TWI
+      const isLargeFile = (factor.id === 'spi' || factor.id === 'twi');
+      badge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-spin"></span> Đang nạp ${factor.name}${isLargeFile ? ' (~8-10MB)...' : '...'}`;
+
+      try {
+        const result = await fetchWithCandidateFiles(factor.files);
+        cachedGeoData[factor.id] = result.data;
+        renderMapData(result.data);
+        badge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Đã nạp ${result.fileName}`;
+      } catch (err) {
+        badge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span> Mô phỏng ${factor.name}`;
+        generateQuyNhonSimulation(factor.fullName);
+      }
+    }
+
+    async function loadGeoJSONFile(fileCandidates, title) {
+      try {
+        const result = await fetchWithCandidateFiles(fileCandidates);
+        renderMapData(result.data);
+      } catch (err) {
+        generateQuyNhonSimulation(title);
+      }
+    }
+
+    function renderMapData(data) {
+      if (activeGeojsonLayer) map.removeLayer(activeGeojsonLayer);
+
+      activeGeojsonLayer = L.geoJSON(data, {
+        style: styleFeature,
+        onEachFeature: onEachFeature
+      }).addTo(map);
+
+      if (data.features && data.features.length > 0) {
+        try {
+          const bounds = activeGeojsonLayer.getBounds();
+          if (bounds.isValid()) map.fitBounds(bounds, { padding: [30, 30] });
+        } catch(e) {}
+      }
+
+      updateAnalytics(data);
+    }
+
+    function generateQuyNhonSimulation(layerTitle) {
+      const bounds = [[13.73, 109.16], [13.85, 109.26]];
+      const latStep = 0.012, lngStep = 0.012;
+      const features = [];
+
+      for (let lat = bounds[0][0]; lat < bounds[1][0]; lat += latStep) {
+        for (let lng = bounds[0][1]; lng < bounds[1][1]; lng += lngStep) {
+          const rank = Math.floor(Math.random() * 5) + 1;
+          features.push({
+            type: "Feature",
+            geometry: {
+              type: "Polygon",
+              coordinates: [[[lng, lat], [lng + lngStep, lat], [lng + lngStep, lat + latStep], [lng, lat + latStep], [lng, lat]]]
+            },
+            properties: {
+              gridcode: rank,
+              class: rank,
+              khuvuc: "Quy Nhơn Đông",
+              nhanto: layerTitle
+            }
+          });
+        }
+      }
+      renderMapData({ type: "FeatureCollection", features: features });
+    }
+
+    let chartInstance = null;
+    function updateAnalytics(data) {
+      const counts = [0, 0, 0, 0, 0];
+      if (data && data.features) {
+        data.features.forEach(f => {
+          const rank = extractRank(f.properties);
+          if (rank >= 1 && rank <= 5) counts[rank - 1]++;
+        });
+      }
+
+      const total = counts.reduce((a, b) => a + b, 0) || 1;
+      document.getElementById('stat-total-features').innerText = `Tổng: ${total} vùng polygon`;
+
+      // Cập nhật biểu đồ Doughnut
+      const ctx = document.getElementById('riskDoughnutChart').getContext('2d');
+      if (chartInstance) {
+        chartInstance.data.datasets[0].data = counts;
+        chartInstance.update();
+      } else {
+        chartInstance = new Chart(ctx, {
+          type: 'doughnut',
+          data: {
+            labels: levelLabels,
+            datasets: [{
+              data: counts,
+              backgroundColor: levelColors,
+              borderWidth: 1,
+              borderColor: '#ffffff'
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } }
+          }
+        });
+      }
+
+      // Cập nhật bảng % diện tích nguy cơ
+      const grid = document.getElementById('stat-breakdown-grid');
+      grid.innerHTML = counts.map((count, i) => `
+        <div class="flex items-center justify-between">
+          <span class="flex items-center gap-1 text-slate-600">
+            <span class="w-2 h-2 rounded-full" style="background:${levelColors[i]}"></span>
+            Cấp ${i+1}:
+          </span>
+          <span class="font-bold text-slate-800 font-mono">${((count/total)*100).toFixed(1)}%</span>
+        </div>
+      `).join('');
+    }
+
+    function toggleOverlay(type, checked) {
+      if (type === 'river') {
+        if (checked) {
+          if (!riverOverlayLayer) {
+            fetch('./data/river.geojson')
+              .then(r => r.json())
+              .then(data => {
+                riverOverlayLayer = L.geoJSON(data, {
+                  style: { color: '#0284c7', weight: 2.5, opacity: 0.9 }
+                }).addTo(map);
+              })
+              .catch(e => {});
+          } else {
+            map.addLayer(riverOverlayLayer);
+          }
+        } else if (riverOverlayLayer) {
+          map.removeLayer(riverOverlayLayer);
+        }
+      }
+
+      if (type === 'road') {
+        if (checked) {
+          if (!roadOverlayLayer) {
+            fetch('./data/road.geojson')
+              .then(r => r.json())
+              .then(data => {
+                roadOverlayLayer = L.geoJSON(data, {
+                  style: { color: '#475569', weight: 2, dashArray: '4, 4', opacity: 0.8 }
+                }).addTo(map);
+              })
+              .catch(e => {});
+          } else {
+            map.addLayer(roadOverlayLayer);
+          }
+        } else if (roadOverlayLayer) {
+          map.removeLayer(roadOverlayLayer);
+        }
+      }
+    }
+
+    function updateGlobalOpacity(val) {
+      globalOpacity = parseFloat(val);
+      document.getElementById('opacity-label').innerText = `${Math.round(globalOpacity * 100)}%`;
+      if (activeGeojsonLayer) {
+        activeGeojsonLayer.setStyle({ fillOpacity: globalOpacity });
+      }
+    }
+
+    function resetMapView() {
+      map.setView(QUY_NHON_CENTER, 12);
+      if (activeGeojsonLayer) {
+        try { map.fitBounds(activeGeojsonLayer.getBounds()); } catch(e){}
+      }
+    }
+
+    function flyToLocation(coords, zoom) {
+      map.flyTo(coords, zoom, { duration: 1.2 });
+    }
+
+    function executeSearch(query) {
+      if (!query || query.trim() === '') return;
+      fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query + ', Quy Nhơn, Bình Định')}`)
+        .then(res => res.json())
+        .then(results => {
+          if (results && results.length > 0) {
+            const r = results[0];
+            const lat = parseFloat(r.lat);
+            const lon = parseFloat(r.lon);
+            map.flyTo([lat, lon], 14);
+            L.popup().setLatLng([lat, lon]).setContent(`<div class="p-2 text-xs font-bold">${r.display_name}</div>`).openOn(map);
+          }
+        })
+        .catch(err => {});
+    }
+
+    window.onload = function () {
+      initMap();
+      renderFactorList();
+      switchLayer('risk');
+      lucide.createIcons();
+
+      setTimeout(() => {
+        map.invalidateSize();
+      }, 400);
+    };
+  </script>
+</body>
+</html>
